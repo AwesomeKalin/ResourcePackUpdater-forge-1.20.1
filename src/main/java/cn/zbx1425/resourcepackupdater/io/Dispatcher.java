@@ -32,7 +32,7 @@ public class Dispatcher {
 
             cb.printLog("Resource Pack Updater v" + ResourcePackUpdater.MOD_VERSION + " (C) Zbx1425, www.zbx1425.cn");
             cb.printLog("Server: " + source.baseUrl);
-            cb.printLog("Target: " + baseDir);
+//            cb.printLog("Target: " + baseDir);
             cb.printLog("");
 
             localMetadata = new LocalMetadata(baseDir);

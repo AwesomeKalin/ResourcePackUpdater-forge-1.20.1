@@ -9,6 +9,7 @@ displayName="Resource Pack Updater"
 logoFile="icon.png"
 authors="Zbx1425"
 description="Updates a resource pack at game launch, or when requested."
+displayTest="IGNORE_ALL_VERSION"
 
 [[dependencies.resourcepackupdater]]
 modId="forge"

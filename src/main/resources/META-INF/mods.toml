@@ -1,0 +1,18 @@
+modLoader="javafml"
+loaderVersion="[0,)"
+license="MIT"
+
+[[mods]]
+modId="resourcepackupdater"
+version="2.3.0"
+displayName="Resource Pack Updater"
+logoFile="icon.png"
+authors="Zbx1425"
+description="Updates a resource pack at game launch, or when requested."
+
+[[dependencies.resourcepackupdater]]
+modId="forge"
+mandatory=true
+versionRange="[0,)"
+ordering="NONE"
+side="BOTH"

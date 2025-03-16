@@ -2,15 +2,16 @@ import groovy.json.JsonSlurper
 import org.apache.tools.ant.filters.ReplaceTokens
 
 plugins {
-    id 'fabric-loom' version '1.7-SNAPSHOT'
     id "de.undercouch.download" version "4.1.2"
     id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '+'
+    id "org.spongepowered.mixin" version "+"
 }
 
 version = project.mod_version
 group = project.maven_group
 
-String default_minecraft_version = "1.16.5"
+String default_minecraft_version = "1.20.1"
 Properties localProperties = new Properties()
 String minecraft_version
 if (project.rootProject.file('build.properties').exists()) {
@@ -30,46 +31,63 @@ String minecraft_version_int = minecraft_version.split("\\.")[0] +
         minecraft_version.split("\\.")[1].padLeft(2, '0') +
         (minecraft_version.split("\\.").length > 2 ? minecraft_version.split("\\.")[2].padLeft(2, '0') : "00")
 boolean is_1_19_3 = minecraft_version == "1.19.3"
-String parchment_version = is_1_19_3 ? "N/A" : new XmlSlurper().parse("https://ldtteam.jfrog.io/artifactory/parchmentmc-internal/org/parchmentmc/data/parchment-${minecraft_version}/maven-metadata.xml").versioning.release
 
+minecraft {
+    mappings channel: "official", version: default_minecraft_version
+    copyIdeResources = true
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
 
-rootProject.ext.fabric_loader_version = new JsonSlurper().parse(("https://meta.fabricmc.net/v2/versions/loader/" + minecraft_version).toURL())[0]["loader"]["version"]
-rootProject.ext.forge_version = minecraft_version + "-" + new JsonSlurper().parse(("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json").toURL())["promos"][minecraft_version + "-latest"]
-rootProject.ext.fabric_api_version = getModrinthVersion("fabric", minecraft_version, "fabric-api")
-rootProject.ext.mod_menu_version = getModrinthVersion("fabric", minecraft_version, "modmenu")
+            mods {
+                "resourcepackupdater" {
+                    source sourceSets.main
+                }
+            }
+        }
 
-repositories {
-    // Add repositories to retrieve artifacts from in here.
-    // You should only use this when depending on other mods because
-    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
-    // for more information about repositories.
-    maven {
-        name = "TerraformersMC"
-        url = uri("https://maven.terraformersmc.com/releases")
-    }
-    maven {
-        name = 'ParchmentMC'
-        url = 'https://maven.parchmentmc.org'
+        client {
+            property 'forge.enabledGameTestNamespaces', "resourcepackupdater"
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', "resourcepackupdater"
+            args '--nogui'
+        }
+
+        gameTestServer {
+            property 'forge.enabledGameTestNamespaces', "resourcepackupdater"
+        }
+
+        data {
+            workingDirectory project.file('run-data')
+
+            args '--mod', "resourcepackupdater", '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
     }
 }
 
+repositories {
+    maven {
+        name = "Forge"
+        url = "https://maven.minecraftforge.net/"
+    }
+    mavenCentral()  // if you need other artifacts from Maven Central
+}
+
 dependencies {
-    // To change the versions see the gradle.properties file
     annotationProcessor 'systems.manifold:manifold-preprocessor:2023.1.0'
-    minecraft "com.mojang:minecraft:${minecraft_version}"
-    mappings is_1_19_3 ? loom.officialMojangMappings() : loom.layered() {
-        officialMojangMappings()
-        parchment("org.parchmentmc.data:parchment-${minecraft_version}:${parchment_version}@zip")
-    }
-    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    minecraft "net.minecraftforge:forge:${default_minecraft_version}-47.3.0"
+    annotationProcessor "org.spongepowered:mixin:+:processor"
+}
 
-    // Fabric API. This is technically optional, but you probably want it anyway.
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-
-    modImplementation ("com.terraformersmc:modmenu:${project.mod_menu_version}") {
-        transitive = false
-    }
+mixin {
+    add sourceSets.main, "resourcepackupdater.refmap.json"
+    config "resourcepackupdater.mixins.json"
+    debug.verbose = true
+    debug.export = true
 }
 
 processResources {
@@ -81,7 +99,7 @@ processResources {
     }
 }
 
-def targetJavaVersion = 16
+def targetJavaVersion = 17
 tasks.withType(JavaCompile).configureEach {
     // ensure that the encoding is set to UTF-8, no matter what the system default is
     // this fixes some edge cases with special characters not displaying correctly
@@ -98,7 +116,7 @@ tasks.withType(JavaCompile).configureEach {
     } else {
         options.release.set(17)
     }
-    options.compilerArgs += ['-Xplugin:Manifold', '-AMC_VERSION=' + minecraft_version_int]
+    options.compilerArgs += ['-AMC_VERSION=' + minecraft_version_int]
 }
 
 
@@ -159,20 +177,4 @@ publishing {
         // The repositories here will be used for publishing your artifact, not for
         // retrieving dependencies.
     }
-}
-
-static def getModrinthVersion(loader, minecraftVersion, projectId) {
-    def versionsArray = new JsonSlurper().parse(("https://api.modrinth.com/v2/project/" + projectId + "/version").toURL())
-    for (def versionElement : versionsArray) {
-        if (versionElement["loaders"].contains(loader) && versionElement["game_versions"].contains(minecraftVersion)) {
-            return versionElement["version_number"]
-        }
-    }
-    return ""
-}
-
-static def getParchmentVersion(minecraftVersion) {
-    def url = "https://ldtteam.jfrog.io/artifactory/parchmentmc-internal/org/parchmentmc/data/parchment-" + minecraftVersion + "/maven-metadata.xml"
-    def data = new XmlParser().parse(url)
-    return data.versioning.latest.text()
 }

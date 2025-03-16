@@ -3,6 +3,7 @@ package cn.zbx1425.resourcepackupdater.mixin;
 import cn.zbx1425.resourcepackupdater.ResourcePackUpdater;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.main.GameConfig;
+import net.minecraftforge.api.distmarker.Dist;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,8 +21,8 @@ public class MinecraftMixin {
         ResourcePackUpdater.modifyPackList();
     }
 
-    @Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/packs/repository/PackRepository;openAllSelected()Ljava/util/List;"), method = "<init>")
-    void ctor(GameConfig gameConfig, CallbackInfo ci) {
+    @Inject(at = @At("RETURN"), method = "<init>")
+    void onInit(CallbackInfo ci) {
         ResourcePackUpdater.dispatchSyncWork();
         ResourcePackUpdater.modifyPackList();
     }

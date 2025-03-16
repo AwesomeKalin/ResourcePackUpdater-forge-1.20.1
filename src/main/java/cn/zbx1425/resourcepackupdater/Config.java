@@ -1,7 +1,7 @@
 package cn.zbx1425.resourcepackupdater;
 
 import com.google.gson.*;
-import net.fabricmc.loader.api.FabricLoader;
+import net.minecraftforge.fml.loading.FMLPaths;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
@@ -22,49 +22,56 @@ import java.util.function.Supplier;
 public class Config {
 
     public final ConfigItem<String> remoteConfigUrl = new ConfigItem<>(
-            "remoteConfigUrl", JsonElement::getAsString, JsonPrimitive::new, "https://mc.zbx1425.cn/jlp-srp/client_config.json");
+            "remoteConfigUrl", JsonElement::getAsString, JsonPrimitive::new, "https://awesomekalin.github.io/matcha-mtr-pack/client_config.json");
 
     public final ConfigItem<List<SourceProperty>> sourceList = new ConfigItem<>(
-        "sources",
-        (json) -> {
-            List<SourceProperty> list = new ArrayList<>();
-            for (JsonElement source : json.getAsJsonArray()) {
-                list.add(new SourceProperty((JsonObject)source));
-            }
-            return list;
-        },
-        (value) -> {
-            JsonArray array = new JsonArray();
-            for (SourceProperty source : value) {
-                if (source.isBuiltin) continue;
-                array.add(source.toJson());
-            }
-            return array;
-        },
-        new ArrayList<>()
+            "sources",
+            (json) -> {
+                List<SourceProperty> list = new ArrayList<>();
+                for (JsonElement source : json.getAsJsonArray()) {
+                    list.add(new SourceProperty((JsonObject) source));
+                }
+                return list;
+            },
+            (value) -> {
+                JsonArray array = new JsonArray();
+                for (SourceProperty source : value) {
+                    if (source.isBuiltin) continue;
+                    array.add(source.toJson());
+                }
+                return array;
+            },
+            new ArrayList<>()
     );
     public final ConfigItem<SourceProperty> selectedSource = new ConfigItem<SourceProperty>(
-        "selectedSource", (json) -> new SourceProperty((JsonObject)json), SourceProperty::toJson, () -> null);
+            "selectedSource",
+            (JsonElement json) -> new SourceProperty(json.getAsJsonObject()),
+            SourceProperty::toJson,
+            () -> null
+    );
     public final ConfigItem<String> localPackName = new ConfigItem<>(
-        "localPackName", JsonElement::getAsString, JsonPrimitive::new, "SyncedPack");
+            "localPackName", JsonElement::getAsString, JsonPrimitive::new, "SyncedPack");
     public final ConfigItem<Boolean> disableBuiltinSources = new ConfigItem<>(
-        "disableBuiltinSources", JsonElement::getAsBoolean, JsonPrimitive::new, false);
+            "disableBuiltinSources", JsonElement::getAsBoolean, JsonPrimitive::new, false);
     public final ConfigItem<Boolean> pauseWhenSuccess = new ConfigItem<>(
-        "pauseWhenSuccess", JsonElement::getAsBoolean, JsonPrimitive::new, false);
+            "pauseWhenSuccess", JsonElement::getAsBoolean, JsonPrimitive::new, false);
     public final ConfigItem<File> packBaseDirFile = new ConfigItem<File>(
-        "packBaseDirFile", (json) -> new File(json.getAsString()),
-            (value) -> new JsonPrimitive(value.toString()), () -> new File(getPackBaseDir()));
+            "packBaseDirFile",
+            (JsonElement json) -> new File(json.getAsString()),
+            (File value) -> new JsonPrimitive(value.toString()),
+            () -> new File(getPackBaseDir())
+    );
 
     public final ConfigItem<String> serverLockKey = new ConfigItem<>(
-        "serverLockKey", JsonElement::getAsString, JsonPrimitive::new, "");
+            "serverLockKey", JsonElement::getAsString, JsonPrimitive::new, "");
     public final ConfigItem<Boolean> clientEnforceInstall = new ConfigItem<>(
-        "clientEnforceInstall", JsonElement::getAsBoolean, JsonPrimitive::new, false);
+            "clientEnforceInstall", JsonElement::getAsBoolean, JsonPrimitive::new, false);
     public final ConfigItem<String> clientEnforceVersion = new ConfigItem<>(
-        "clientEnforceVersion", JsonElement::getAsString, JsonPrimitive::new, "");
+            "clientEnforceVersion", JsonElement::getAsString, JsonPrimitive::new, "");
 
     public List<ConfigItem<?>> configItems = List.of(
-        remoteConfigUrl, sourceList, selectedSource, localPackName, disableBuiltinSources,
-        pauseWhenSuccess, packBaseDirFile, serverLockKey, clientEnforceInstall, clientEnforceVersion
+            remoteConfigUrl, sourceList, selectedSource, localPackName, disableBuiltinSources,
+            pauseWhenSuccess, packBaseDirFile, serverLockKey, clientEnforceInstall, clientEnforceVersion
     );
 
     public void load() throws IOException {
@@ -72,7 +79,7 @@ public class Config {
             save();
         }
 
-        JsonObject localConfig = (JsonObject)ResourcePackUpdater.JSON_PARSER.parse(Files.readString(getConfigFilePath()));
+        JsonObject localConfig = (JsonObject) ResourcePackUpdater.JSON_PARSER.parse(Files.readString(getConfigFilePath()));
         remoteConfigUrl.load(localConfig, new JsonObject());
         JsonObject remoteConfig;
         if (remoteConfigUrl.value.isEmpty()) {
@@ -82,7 +89,6 @@ public class Config {
                 HttpRequest httpRequest = HttpRequest.newBuilder(new URI(remoteConfigUrl.value))
                         .timeout(Duration.ofSeconds(10))
                         .setHeader("User-Agent", "ResourcePackUpdater/" + ResourcePackUpdater.MOD_VERSION + " +https://www.zbx1425.cn")
-                        .setHeader("Accept-Encoding", "gzip")
                         .GET()
                         .build();
                 HttpResponse<String> httpResponse;
@@ -105,7 +111,7 @@ public class Config {
         }
 
         if (remoteConfigUrl.isFromLocal && remoteConfig.has("remoteConfigUrl")
-            && !remoteConfig.get("remoteConfigUrl").getAsString().equals(remoteConfigUrl.value)) {
+                && !remoteConfig.get("remoteConfigUrl").getAsString().equals(remoteConfigUrl.value)) {
             remoteConfigUrl.load(remoteConfig, remoteConfig);
             save();
         }
@@ -145,14 +151,13 @@ public class Config {
     }
 
     public String getPackBaseDir() {
-        String sx = FabricLoader.getInstance().getGameDir().toString();
+        String sx = FMLPaths.GAMEDIR.get().toString();
         return Paths.get(sx, "resourcepacks", localPackName.value).toAbsolutePath().normalize().toString();
     }
 
     public Path getConfigFilePath() {
-        return FabricLoader.getInstance().getConfigDir().resolve(ResourcePackUpdater.MOD_ID + ".json");
+        return FMLPaths.CONFIGDIR.get().resolve(ResourcePackUpdater.MOD_ID + ".json");
     }
-
 
     public static class ConfigItem<T> {
 
@@ -237,17 +242,22 @@ public class Config {
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
-
             if (o == null || getClass() != o.getClass()) return false;
-
             SourceProperty that = (SourceProperty) o;
-
-            return new EqualsBuilder().append(hasDirHash, that.hasDirHash).append(hasArchive, that.hasArchive).append(baseUrl, that.baseUrl).isEquals();
+            return new EqualsBuilder()
+                    .append(hasDirHash, that.hasDirHash)
+                    .append(hasArchive, that.hasArchive)
+                    .append(baseUrl, that.baseUrl)
+                    .isEquals();
         }
 
         @Override
         public int hashCode() {
-            return new HashCodeBuilder(17, 37).append(baseUrl).append(hasDirHash).append(hasArchive).toHashCode();
+            return new HashCodeBuilder(17, 37)
+                    .append(baseUrl)
+                    .append(hasDirHash)
+                    .append(hasArchive)
+                    .toHashCode();
         }
     }
 }

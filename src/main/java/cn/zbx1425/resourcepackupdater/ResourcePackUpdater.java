@@ -6,12 +6,14 @@ import cn.zbx1425.resourcepackupdater.gui.GlProgressScreen;
 import cn.zbx1425.resourcepackupdater.io.Dispatcher;
 import cn.zbx1425.resourcepackupdater.io.network.DummyTrustManager;
 import com.google.gson.JsonParser;
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -22,7 +24,8 @@ import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class ResourcePackUpdater implements ModInitializer {
+@Mod(ResourcePackUpdater.MOD_ID)
+public class ResourcePackUpdater {
 
     public static final String MOD_ID = "resourcepackupdater";
 
@@ -54,10 +57,8 @@ public class ResourcePackUpdater implements ModInitializer {
                 .build();
     }
 
-    @Override
-    public void onInitialize() {
-        MOD_VERSION = FabricLoader.getInstance().getModContainer(MOD_ID).get()
-                .getMetadata().getVersion().getFriendlyString();
+    public ResourcePackUpdater() {
+        MOD_VERSION = "2.3.0";
         try {
             CONFIG.load();
         } catch (IOException e) {
@@ -66,96 +67,102 @@ public class ResourcePackUpdater implements ModInitializer {
     }
 
     public static void dispatchSyncWork() {
-        GlHelper.initGlStates();
+        if (Dist.CLIENT.isClient()) {
+            GlHelper.initGlStates();
 
-        while (true) {
-            Dispatcher syncDispatcher = new Dispatcher();
-            if (ResourcePackUpdater.CONFIG.selectedSource.value == null // TODO how did we get here?
-                || ResourcePackUpdater.CONFIG.selectedSource.value.baseUrl.isEmpty()) {
-                if (ResourcePackUpdater.CONFIG.sourceList.value.size() > 1) {
-                    ResourcePackUpdater.GL_PROGRESS_SCREEN.resetToSelectSource();
-                    try {
-                        while (ResourcePackUpdater.GL_PROGRESS_SCREEN.shouldContinuePausing(true)) {
-                            Thread.sleep(50);
+            while (true) {
+                Dispatcher syncDispatcher = new Dispatcher();
+                if (ResourcePackUpdater.CONFIG.selectedSource.value == null // TODO how did we get here?
+                        || ResourcePackUpdater.CONFIG.selectedSource.value.baseUrl.isEmpty()) {
+                    if (ResourcePackUpdater.CONFIG.sourceList.value.size() > 1) {
+                        ResourcePackUpdater.GL_PROGRESS_SCREEN.resetToSelectSource();
+                        try {
+                            while (ResourcePackUpdater.GL_PROGRESS_SCREEN.shouldContinuePausing(true)) {
+                                Thread.sleep(50);
+                            }
+                        } catch (GlHelper.MinecraftStoppingException ignored) {
+                            ServerLockRegistry.lockAllSyncedPacks = true;
+                            break;
+                        } catch (Exception ignored) {
                         }
-                    } catch (GlHelper.MinecraftStoppingException ignored) {
-                        ServerLockRegistry.lockAllSyncedPacks = true;
-                        break;
-                    } catch (Exception ignored) {
+                    } else if (ResourcePackUpdater.CONFIG.sourceList.value.size() == 1) {
+                        ResourcePackUpdater.CONFIG.selectedSource.value = ResourcePackUpdater.CONFIG.sourceList.value.get(0);
+                        ResourcePackUpdater.CONFIG.selectedSource.isFromLocal = true;
+                    } else {
+                        ResourcePackUpdater.CONFIG.selectedSource.value = new Config.SourceProperty(
+                                "NOT CONFIGURED",
+                                "",
+                                false, false, true
+                        );
                     }
-                } else if (ResourcePackUpdater.CONFIG.sourceList.value.size() == 1) {
-                    ResourcePackUpdater.CONFIG.selectedSource.value = ResourcePackUpdater.CONFIG.sourceList.value.get(0);
-                    ResourcePackUpdater.CONFIG.selectedSource.isFromLocal = true;
-                } else {
+                }
+
+                ResourcePackUpdater.GL_PROGRESS_SCREEN.reset();
+                try {
+                    boolean syncSuccess = syncDispatcher.runSync(ResourcePackUpdater.CONFIG.getPackBaseDir(),
+                            ResourcePackUpdater.CONFIG.selectedSource.value, ResourcePackUpdater.GL_PROGRESS_SCREEN);
+                    if (syncSuccess) {
+                        ServerLockRegistry.lockAllSyncedPacks = false;
+                    } else {
+                        ServerLockRegistry.lockAllSyncedPacks = true;
+                    }
+
+                    Minecraft.getInstance().options.save();
+                    try {
+                        ResourcePackUpdater.CONFIG.save();
+                    } catch (IOException ignored) {
+                    }
+                    break;
+                } catch (GlHelper.MinecraftStoppingException ignored) {
+                    ServerLockRegistry.lockAllSyncedPacks = true;
                     ResourcePackUpdater.CONFIG.selectedSource.value = new Config.SourceProperty(
                             "NOT CONFIGURED",
                             "",
                             false, false, true
                     );
-                }
-            }
-
-            ResourcePackUpdater.GL_PROGRESS_SCREEN.reset();
-            try {
-                boolean syncSuccess = syncDispatcher.runSync(ResourcePackUpdater.CONFIG.getPackBaseDir(),
-                        ResourcePackUpdater.CONFIG.selectedSource.value, ResourcePackUpdater.GL_PROGRESS_SCREEN);
-                if (syncSuccess) {
-                    ServerLockRegistry.lockAllSyncedPacks = false;
-                } else {
+                    if (ResourcePackUpdater.CONFIG.sourceList.value.size() <= 1) {
+                        break;
+                    }
+                } catch (Exception ignored) {
                     ServerLockRegistry.lockAllSyncedPacks = true;
-                }
-
-                Minecraft.getInstance().options.save();
-                try {
-                    ResourcePackUpdater.CONFIG.save();
-                } catch (IOException ignored) { }
-                break;
-            } catch (GlHelper.MinecraftStoppingException ignored) {
-                ServerLockRegistry.lockAllSyncedPacks = true;
-                ResourcePackUpdater.CONFIG.selectedSource.value = new Config.SourceProperty(
-                        "NOT CONFIGURED",
-                        "",
-                        false, false, true
-                );
-                if (ResourcePackUpdater.CONFIG.sourceList.value.size() <= 1) {
                     break;
                 }
+            }
+
+            try {
+                while (ResourcePackUpdater.GL_PROGRESS_SCREEN.shouldContinuePausing(true)) {
+                    Thread.sleep(50);
+                }
             } catch (Exception ignored) {
-                ServerLockRegistry.lockAllSyncedPacks = true;
-                break;
             }
+
+            ServerLockRegistry.updateLocalServerLock(ResourcePackUpdater.CONFIG.packBaseDirFile.value);
+            GlHelper.resetGlStates();
         }
-
-        try {
-            while (ResourcePackUpdater.GL_PROGRESS_SCREEN.shouldContinuePausing(true)) {
-                Thread.sleep(50);
-            }
-        } catch (Exception ignored) { }
-
-        ServerLockRegistry.updateLocalServerLock(ResourcePackUpdater.CONFIG.packBaseDirFile.value);
-        GlHelper.resetGlStates();
     }
 
     public static void modifyPackList() {
-        Options options = Minecraft.getInstance().options;
-        String expectedEntry = "file/" + ResourcePackUpdater.CONFIG.localPackName.value;
-        options.resourcePacks.remove(expectedEntry);
-        if (!options.resourcePacks.contains("vanilla")) {
-            options.resourcePacks.add("vanilla");
-        }
-        if (!options.resourcePacks.contains("Fabric Mods")) {
-            options.resourcePacks.add("Fabric Mods");
-        }
+        if (Dist.CLIENT.isClient()) {
+            Options options = Minecraft.getInstance().options;
+            String expectedEntry = "file/" + ResourcePackUpdater.CONFIG.localPackName.value;
+            options.resourcePacks.remove(expectedEntry);
+            if (!options.resourcePacks.contains("vanilla")) {
+                options.resourcePacks.add("vanilla");
+            }
+            if (!options.resourcePacks.contains("Fabric Mods")) {
+                options.resourcePacks.add("Fabric Mods");
+            }
         /*
         if (!ServerLockRegistry.shouldRefuseProvidingFile(null)) {
             options.resourcePacks.add(expectedEntry);
         }
         */
-        options.resourcePacks.add(expectedEntry);
-        options.incompatibleResourcePacks.remove(expectedEntry);
+            options.resourcePacks.add(expectedEntry);
+            options.incompatibleResourcePacks.remove(expectedEntry);
 
-        PackRepository repository = Minecraft.getInstance().getResourcePackRepository();
-        repository.reload();
-        options.loadSelectedResourcePacks(repository);
+            PackRepository repository = Minecraft.getInstance().getResourcePackRepository();
+            repository.reload();
+            options.loadSelectedResourcePacks(repository);
+        }
     }
 }

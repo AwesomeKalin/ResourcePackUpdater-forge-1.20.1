@@ -3,17 +3,14 @@
   "minVersion": "0.8",
   "package": "cn.zbx1425.resourcepackupdater.mixin",
   "compatibilityLevel": "JAVA_8",
+  "refmap": "resourcepackupdater.refmap.json",
   "mixins": [
     "PlayerListMixin",
     "ServerGamePacketListenerImplMixin",
     "ServerPlayerMixin"
   ],
   "client": [
-    "ClientPacketListenerMixin",
-    "FolderPackResourcesMixin",
-    "MinecraftMixin",
-    "MultiPackResourceManagerMixin",
-    "OptionsScreenMixin"
+    "MinecraftMixin"
   ],
   "server": [],
   "injectors": {
